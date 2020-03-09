@@ -194,26 +194,31 @@ module Spree
       end
 
       def add_shipping_address(order)
-        order.ship_address = ship_address.clone
-        order.bill_address = bill_address.clone
-        order.next
+        if order.address?
+          order.ship_address = ship_address.clone
+          order.bill_address = bill_address.clone
+          order.next
+        end
       end
 
       # select shipping method which was selected in original order.
       def add_delivery_method_to_order(order)
-        selected_shipping_method_id = parent_order.inventory_units.where(variant_id: variant.id).first.shipment.shipping_method.id
+        if order.delivery?
+          if !order.shipments.empty?
+            selected_shipping_method_id = parent_order.inventory_units.where(variant_id: variant.id).first.shipment.shipping_method.id
 
-        order.shipments.each do |shipment|
-          current_shipping_rate = shipment.shipping_rates.find_by(selected: true)
-          proposed_shipping_rate = shipment.shipping_rates.find_by(shipping_method_id: selected_shipping_method_id)
+            order.shipments.each do |shipment|
+              current_shipping_rate = shipment.shipping_rates.find_by(selected: true)
+              proposed_shipping_rate = shipment.shipping_rates.find_by(shipping_method_id: selected_shipping_method_id)
 
-          if proposed_shipping_rate.present? && current_shipping_rate != proposed_shipping_rate
-            current_shipping_rate.update(selected: false)
-            proposed_shipping_rate.update(selected: true)
+              if proposed_shipping_rate.present? && current_shipping_rate != proposed_shipping_rate
+                current_shipping_rate.update(selected: false)
+                proposed_shipping_rate.update(selected: true)
+              end
+            end
           end
+          order.next
         end
-
-        order.next
       end
 
       def add_shipping_costs_to_order(order)
@@ -230,7 +235,9 @@ module Spree
       end
 
       def confirm_order(order)
-        order.next
+        if order.confirm? 
+          order.next
+        end
       end
 
       def order_attributes

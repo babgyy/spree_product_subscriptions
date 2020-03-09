@@ -1,9 +1,10 @@
-Spree::OrdersController.class_eval do
+if defined? Spree::OrdersController
+  Spree::OrdersController.class_eval do
 
-  before_action :add_subscription_fields, only: :populate, if: -> { params[:subscribe].present? }
-  before_action :restrict_guest_subscription, only: :update, unless: :spree_current_user
+    before_action :add_subscription_fields, only: :populate, if: -> { params[:subscribe].present? }
+    before_action :restrict_guest_subscription, only: :update, unless: :spree_current_user
 
-  private
+    private
 
     def restrict_guest_subscription
       redirect_to login_path, error: Spree.t(:required_authentication) if @order.subscriptions.present?
@@ -19,4 +20,5 @@ Spree::OrdersController.class_eval do
       updated_params
     end
 
+  end
 end
