@@ -5,7 +5,7 @@ describe Spree::SubscriptionsController, type: :controller do
   stub_authorization!
 
   let(:active_subscription) { mock_model(Spree::Subscription, id: 1, enabled: true, next_occurrence_at: Time.current) }
-  let(:cancelled_subscription) { mock_model(Spree::Subscription, id: 2, cancelled_at: Time.current, cancellation_reasons: "Test", enabled: true) }
+  let(:canceled_subscription) { mock_model(Spree::Subscription, id: 2, canceled_at: Time.current, cancellation_reasons: "Test", enabled: true) }
   let(:subscriptions) { double(ActiveRecord::Relation) }
 
   describe "Callbacks" do
@@ -112,23 +112,23 @@ describe Spree::SubscriptionsController, type: :controller do
       end
     end
 
-    describe "#ensure_not_cancelled" do
+    describe "#ensure_not_canceled" do
       context "html request" do
-        context "when subscription is cancelled" do
-          let(:params) { { id: cancelled_subscription.id } }
+        context "when subscription is canceled" do
+          let(:params) { { id: canceled_subscription.id } }
 
           before do
             request.env["HTTP_REFERER"] = account_path
             allow(Spree::Subscription).to receive(:active).and_return(subscriptions)
-            allow(subscriptions).to receive(:find_by).and_return(cancelled_subscription)
-            allow(cancelled_subscription).to receive(:not_changeable?).and_return(true)
+            allow(subscriptions).to receive(:find_by).and_return(canceled_subscription)
+            allow(canceled_subscription).to receive(:not_changeable?).and_return(true)
           end
 
           context "expects to receive" do
             after { do_cancel params }
             it { expect(Spree::Subscription).to receive(:active).and_return(subscriptions) }
-            it { expect(subscriptions).to receive(:find_by).and_return(cancelled_subscription) }
-            it { expect(cancelled_subscription).to receive(:not_changeable?).and_return(true) }
+            it { expect(subscriptions).to receive(:find_by).and_return(canceled_subscription) }
+            it { expect(canceled_subscription).to receive(:not_changeable?).and_return(true) }
           end
 
           context "response" do
@@ -139,7 +139,7 @@ describe Spree::SubscriptionsController, type: :controller do
           end
         end
 
-        context "when subscription is not cancelled" do
+        context "when subscription is not canceled" do
           let(:params) { { id: active_subscription.id } }
 
           before do
@@ -166,20 +166,20 @@ describe Spree::SubscriptionsController, type: :controller do
       end
 
       context "json request" do
-        context "when subscription is cancelled" do
-          let(:params) { { id: cancelled_subscription.id, format: :json } }
+        context "when subscription is canceled" do
+          let(:params) { { id: canceled_subscription.id, format: :json } }
 
           before do
             allow(Spree::Subscription).to receive(:active).and_return(subscriptions)
-            allow(subscriptions).to receive(:find_by).and_return(cancelled_subscription)
-            allow(cancelled_subscription).to receive(:not_changeable?).and_return(true)
+            allow(subscriptions).to receive(:find_by).and_return(canceled_subscription)
+            allow(canceled_subscription).to receive(:not_changeable?).and_return(true)
           end
 
           context "expects to receive" do
             after { do_cancel params }
             it { expect(Spree::Subscription).to receive(:active).and_return(subscriptions) }
-            it { expect(subscriptions).to receive(:find_by).and_return(cancelled_subscription) }
-            it { expect(cancelled_subscription).to receive(:not_changeable?).and_return(true) }
+            it { expect(subscriptions).to receive(:find_by).and_return(canceled_subscription) }
+            it { expect(canceled_subscription).to receive(:not_changeable?).and_return(true) }
           end
 
           context "response" do
@@ -189,7 +189,7 @@ describe Spree::SubscriptionsController, type: :controller do
           end
         end
 
-        context "when subscription is not cancelled" do
+        context "when subscription is not canceled" do
           let(:params) { { id: active_subscription.id, format: :json } }
 
           before do

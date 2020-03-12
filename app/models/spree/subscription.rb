@@ -1,7 +1,7 @@
 module Spree
   class Subscription < Spree::Base
 
-    attr_accessor :cancelled
+    attr_accessor :canceled
 
     include Spree::Core::NumberGenerator.new(prefix: 'S')
 
@@ -11,7 +11,7 @@ module Spree
                                cancel: "Cancel"
                              }
 
-    USER_DEFAULT_CANCELLATION_REASON = "Cancelled By User"
+    USER_DEFAULT_CANCELLATION_REASON = "Canceled By User"
 
     belongs_to :ship_address, class_name: "Spree::Address"
     belongs_to :bill_address, class_name: "Spree::Address"
@@ -32,9 +32,9 @@ module Spree
     scope :unpaused, -> { where(paused: false) }
     scope :disabled, -> { where(enabled: false) }
     scope :active, -> { where(enabled: true) }
-    scope :not_cancelled, -> { where(cancelled_at: nil) }
+    scope :not_canceled, -> { where(canceled_at: nil) }
     scope :with_appropriate_delivery_time, -> { where("next_occurrence_at <= :current_date", current_date: Time.current) }
-    scope :processable, -> { unpaused.active.not_cancelled }
+    scope :processable, -> { unpaused.active.not_canceled }
     scope :eligible_for_subscription, -> { processable.with_appropriate_delivery_time }
     scope :with_parent_orders, -> (orders) { where(parent_order: orders) }
 
@@ -46,11 +46,29 @@ module Spree
     end
     with_options presence: true do
       validates :quantity, :delivery_number, :price, :number, :variant, :parent_order, :frequency, :prior_notification_days_gap
-      validates :cancellation_reasons, :cancelled_at, if: :cancelled
+      validates :cancellation_reasons, :canceled_at, if: :canceled
       validates :next_occurrence_at, :source, if: :enabled?
     end
     validate :next_occurrence_at_range, if: :next_occurrence_at
     validate :prior_notification_days_gap_value, if: :prior_notification_days_gap
+
+    state_machine :state, initial: :pending do
+      event :activate do
+        transition from: [:pending, :processing], to: :active
+      end
+
+      event :cancel do
+        transition from: [:active, :paused], to: :canceled
+      end
+
+      event :renew do 
+        transition from: [:active, :paused], to: :processing
+      end
+
+      event :failed do 
+        transition from: :processing, to: :paused
+      end
+    end
 
     define_model_callbacks :pause, only: [:before]
     before_pause :can_pause?
@@ -62,8 +80,8 @@ module Spree
     before_cancel :set_cancellation_reason, if: :can_set_cancellation_reason?
 
     before_validation :set_next_occurrence_at, if: :can_set_next_occurrence_at?
-    before_validation :set_cancelled_at, if: :can_set_cancelled_at?
-    before_update :not_cancelled?
+    before_validation :set_canceled_at, if: :can_set_canceled_at?
+    before_update :not_canceled?
     before_validation :update_price, on: :update, if: :variant_id_changed?
     before_update :next_occurrence_at_not_changed?, if: :paused?
     after_update :notify_user, if: :user_notifiable?
@@ -81,12 +99,12 @@ module Spree
     end
 
     def cancel_with_reason(attributes)
-      self.cancelled = true
+      self.canceled = true
       update(attributes)
     end
 
-    def cancelled?
-      !!cancelled_at_was
+    def canceled?
+      !!canceled_at_was
     end
 
     def number_of_deliveries_left
@@ -106,9 +124,9 @@ module Spree
     end
 
     def cancel
-      self.cancelled = true
+      self.canceled = true
       run_callbacks :cancel do
-        update_attributes(cancelled_at: Time.current)
+        update_attributes(canceled_at: Time.current)
       end
     end
 
@@ -117,7 +135,7 @@ module Spree
     end
 
     def not_changeable?
-      cancelled? || !deliveries_remaining?
+      canceled? || !deliveries_remaining?
     end
 
     def send_prior_notification
@@ -145,8 +163,8 @@ module Spree
         variant.present? && variant_was.try(:product_id) == variant.product_id
       end
 
-      def set_cancelled_at
-        self.cancelled_at = Time.current
+      def set_canceled_at
+        self.canceled_at = Time.current
       end
 
       def set_next_occurrence_at
@@ -166,11 +184,11 @@ module Spree
       end
 
       def can_pause?
-        enabled? && !cancelled? && deliveries_remaining? && !paused?
+        enabled? && !canceled? && deliveries_remaining? && !paused?
       end
 
       def can_unpause?
-        enabled? && !cancelled? && deliveries_remaining? && paused?
+        enabled? && !canceled? && deliveries_remaining? && paused?
       end
 
       def recreate_order
@@ -255,12 +273,12 @@ module Spree
         SubscriptionNotifier.notify_confirmation(self).deliver_later
       end
 
-      def not_cancelled?
-        !cancelled?
+      def not_canceled?
+        !canceled?
       end
 
-      def can_set_cancelled_at?
-        cancelled.present? && deliveries_remaining?
+      def can_set_canceled_at?
+        canceled.present? && deliveries_remaining?
       end
 
       def set_cancellation_reason
@@ -268,7 +286,7 @@ module Spree
       end
 
       def can_set_cancellation_reason?
-        cancelled.present? && deliveries_remaining? && cancellation_reasons.nil?
+        canceled.present? && deliveries_remaining? && cancellation_reasons.nil?
       end
 
       def notify_cancellation
@@ -276,7 +294,7 @@ module Spree
       end
 
       def cancellation_notifiable?
-        cancelled_at.present? && cancelled_at_changed?
+        canceled_at.present? && canceled_at_changed?
       end
 
       def reoccurrence_notifiable?

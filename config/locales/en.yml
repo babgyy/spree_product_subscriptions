@@ -9,7 +9,7 @@ en:
       notify_confirmation:
         subject: "%{frequency} %{number} Subscription Confirmation"
       notify_cancellation:
-        subject: "%{frequency} %{number} Subscription Cancelled"
+        subject: "%{frequency} %{number} Subscription Canceled"
       notify_reoccurrence:
         subject: "%{frequency} %{number} Subscription Reoccurrence"
       notify_for_next_delivery:
@@ -24,7 +24,7 @@ en:
         success: "Subscription is active. Your next occurrence will be on %{next_occurrence_at}"
         error: "There was some faiure in activating the subscription"
       cancel:
-        success: "Subscription was successfully cancelled"
+        success: "Subscription was successfully canceled"
         error: "There was some problem in cancelling the subscription"
       update:
         success: "Subscription was successfully updated"
@@ -32,12 +32,12 @@ en:
         missing: "Subscription does not exist."
       error:
         out_of_range: "Next Occurrence cannot be before today's date"
-        not_changeable: "Subscription is either cancelled or all the deliveries are done."
+        not_changeable: "Subscription is either canceled or all the deliveries are done."
         should_be_earlier_than_next_delivery: 'should be earlier than next delivery'
       confirm:
         pause: "Are you sure you want to pause this subscription"
         activate: "Are you sure you want to activate this subscription"
-        cancel: "Are you sure to cancel this subscription. One cancelled it cannot be started again."
+        cancel: "Are you sure to cancel this subscription. One canceled it cannot be started again."
 
     admin:
       subscriptions:
@@ -48,10 +48,10 @@ en:
           success: "Subscription is active. Your next occurrence will be on %{next_occurrence_at}"
           error: "There was some problem in activating subscription"
         cancel:
-          success: "Subscription is cancelled"
+          success: "Subscription is canceled"
         cancellation:
-          confirm: "Once cancelled, subscription can not be enabled again"
-        error_on_already_cancelled: "Cancelled Subscription can not be processed."
+          confirm: "Once canceled, subscription can not be enabled again"
+        error_on_already_canceled: "Canceled Subscription can not be processed."
 
     required_authentication: 'Please Login Before Proceeding.'
 

@@ -10,7 +10,7 @@ describe Spree::Subscription, type: :model do
   let(:disabled_subscription) { create(:valid_subscription, enabled: false) }
   let(:completed_subscription) { create(:valid_subscription, enabled: true, delivery_number: 1, next_occurrence_at: Time.current + 10.days) }
   let(:paused_subscription) { create(:valid_subscription, paused: true, enabled: true, next_occurrence_at: just_passed_time) }
-  let(:cancelled_subscription) { create(:valid_subscription, cancelled_at: Time.current, cancellation_reasons: "Test") }
+  let(:canceled_subscription) { create(:valid_subscription, canceled_at: Time.current, cancellation_reasons: "Test") }
   let(:subscription_with_recreated_orders) { create(:valid_subscription, orders: orders, next_occurrence_at: just_passed_time) }
   let(:just_passed_time) { Time.current - 1.minute }
   let(:frequency) { create(:monthly_subscription_frequency) }
@@ -40,25 +40,25 @@ describe Spree::Subscription, type: :model do
     it { is_expected.to validate_presence_of(:frequency) }
     it { is_expected.to validate_presence_of(:prior_notification_days_gap) }
 
-    context "if cancelled present" do
-      before { subject.cancelled = true }
+    context "if canceled present" do
+      before { subject.canceled = true }
       it { expect(subject).to validate_presence_of(:cancellation_reasons) }
-      context "validate_presence_of cancelled_at" do
-        context "when cancelled at is present" do
+      context "validate_presence_of canceled_at" do
+        context "when canceled at is present" do
           before do
-            nil_attributes_subscription.cancelled = true
-            nil_attributes_subscription.cancelled_at = Time.current
+            nil_attributes_subscription.canceled = true
+            nil_attributes_subscription.canceled_at = Time.current
             nil_attributes_subscription.save
           end
-          it { expect(nil_attributes_subscription.cancelled_at).to be_present }
+          it { expect(nil_attributes_subscription.canceled_at).to be_present }
         end
 
-        context "when cancelled_at is absent" do
+        context "when canceled_at is absent" do
           before do
-            nil_attributes_subscription.cancelled = true
+            nil_attributes_subscription.canceled = true
             nil_attributes_subscription.save
           end
-          it { expect(nil_attributes_subscription.cancelled_at).to_not be_present }
+          it { expect(nil_attributes_subscription.canceled_at).to_not be_present }
         end
       end
     end
@@ -105,10 +105,10 @@ describe Spree::Subscription, type: :model do
 
   describe "callbacks" do
     it { is_expected.to callback(:set_next_occurrence_at).before(:validation).if(:can_set_next_occurrence_at?) }
-    it { is_expected.to callback(:set_cancelled_at).before(:validation).if(:can_set_cancelled_at?) }
+    it { is_expected.to callback(:set_canceled_at).before(:validation).if(:can_set_canceled_at?) }
     it { is_expected.to callback(:update_price).before(:validation).on(:update).if(:variant_id_changed?) }
     it { is_expected.to callback(:notify_cancellation).after(:update).if(:cancellation_notifiable?) }
-    it { is_expected.to callback(:not_cancelled?).before(:update) }
+    it { is_expected.to callback(:not_canceled?).before(:update) }
     it { is_expected.to callback(:next_occurrence_at_not_changed?).before(:update).if(:paused?) }
     it { is_expected.to callback(:notify_user).after(:update).if(:user_notifiable?) }
     it { is_expected.to callback(:can_pause?).before(:pause) }
@@ -119,8 +119,8 @@ describe Spree::Subscription, type: :model do
   end
 
   describe "attr_accessors" do
-    it { is_expected.to respond_to :cancelled }
-    it { is_expected.to respond_to :cancelled= }
+    it { is_expected.to respond_to :canceled }
+    it { is_expected.to respond_to :canceled= }
   end
 
   describe "scopes" do
@@ -134,22 +134,22 @@ describe Spree::Subscription, type: :model do
       it { expect(Spree::Subscription.active).to_not include disabled_subscription }
     end
 
-    context ".not_cancelled" do
-      it { expect(Spree::Subscription.not_cancelled).to include active_subscription }
-      it { expect(Spree::Subscription.not_cancelled).to_not include cancelled_subscription }
+    context ".not_canceled" do
+      it { expect(Spree::Subscription.not_canceled).to include active_subscription }
+      it { expect(Spree::Subscription.not_canceled).to_not include canceled_subscription }
     end
 
     context ".processable" do
       it { expect(Spree::Subscription.processable).to include active_subscription }
       it { expect(Spree::Subscription.processable).to_not include disabled_subscription }
-      it { expect(Spree::Subscription.processable).to_not include cancelled_subscription }
+      it { expect(Spree::Subscription.processable).to_not include canceled_subscription }
       it { expect(Spree::Subscription.processable).to_not include paused_subscription }
     end
 
     context ".eligible_for_subscription" do
       it { expect(Spree::Subscription.eligible_for_subscription).to include active_subscription }
       it { expect(Spree::Subscription.eligible_for_subscription).to_not include disabled_subscription }
-      it { expect(Spree::Subscription.eligible_for_subscription).to_not include cancelled_subscription }
+      it { expect(Spree::Subscription.eligible_for_subscription).to_not include canceled_subscription }
       it { expect(Spree::Subscription.eligible_for_subscription).to_not include paused_subscription }
     end
 
@@ -181,15 +181,15 @@ describe Spree::Subscription, type: :model do
   end
 
   describe "methods" do
-    context "#cancelled?" do
-      it { expect(active_subscription).to_not be_cancelled }
-      it { expect(disabled_subscription).to_not be_cancelled }
-      it { expect(cancelled_subscription).to be_cancelled }
+    context "#canceled?" do
+      it { expect(active_subscription).to_not be_canceled }
+      it { expect(disabled_subscription).to_not be_canceled }
+      it { expect(canceled_subscription).to be_canceled }
     end
 
-    context "#set_cancelled_at" do
-      before { nil_attributes_subscription.send :set_cancelled_at }
-      it { expect(nil_attributes_subscription.cancelled_at).to_not be_nil }
+    context "#set_canceled_at" do
+      before { nil_attributes_subscription.send :set_canceled_at }
+      it { expect(nil_attributes_subscription.canceled_at).to_not be_nil }
     end
 
     context "#update_price" do
@@ -232,21 +232,21 @@ describe Spree::Subscription, type: :model do
 
     context "#set_cancellation_reason" do
       before { nil_attributes_subscription.send :set_cancellation_reason }
-      it { expect(nil_attributes_subscription.cancellation_reasons).to eq "Cancelled By User" }
+      it { expect(nil_attributes_subscription.cancellation_reasons).to eq "Canceled By User" }
     end
 
     context "#can_set_cancellation_reason?" do
-      context "when cancelled is not set" do
+      context "when canceled is not set" do
         it { expect(active_subscription.send :can_set_cancellation_reason?).to eq false }
       end
 
-      context "when cancelled bit is set" do
-        before { active_subscription.cancelled = true }
+      context "when canceled bit is set" do
+        before { active_subscription.canceled = true }
         it { expect(active_subscription.send :can_set_cancellation_reason?).to eq true }
       end
 
-      context "if subscription is already cancelled" do
-        it { expect(cancelled_subscription.send :can_set_cancellation_reason?).to eq false }
+      context "if subscription is already canceled" do
+        it { expect(canceled_subscription.send :can_set_cancellation_reason?).to eq false }
       end
     end
 
@@ -278,7 +278,7 @@ describe Spree::Subscription, type: :model do
 
     context "#cancel" do
       before { active_subscription.cancel }
-      it { expect(active_subscription.cancelled_at).to_not be_nil }
+      it { expect(active_subscription.canceled_at).to_not be_nil }
       it { expect(active_subscription.cancellation_reasons).to_not be_nil }
       it { expect(active_subscription.cancellation_reasons).to eq Spree::Subscription::USER_DEFAULT_CANCELLATION_REASON }
     end
@@ -286,14 +286,14 @@ describe Spree::Subscription, type: :model do
     context "#not_changeable?" do
       it { expect(active_subscription).to_not be_not_changeable }
       it { expect(paused_subscription).to_not be_not_changeable }
-      it { expect(cancelled_subscription).to be_not_changeable }
+      it { expect(canceled_subscription).to be_not_changeable }
       it { expect(completed_subscription).to be_not_changeable }
     end
 
     context "#can_pause?" do
       it { expect(active_subscription.send :can_pause?).to eq true }
       it { expect(paused_subscription.send :can_pause?).to eq false }
-      it { expect(cancelled_subscription.send :can_pause?).to eq false }
+      it { expect(canceled_subscription.send :can_pause?).to eq false }
       it { expect(disabled_subscription.send :can_pause?).to eq false }
       it { expect(completed_subscription.send :can_pause?).to eq false }
     end
@@ -301,7 +301,7 @@ describe Spree::Subscription, type: :model do
     context "#can_unpause?" do
       it { expect(active_subscription.send :can_unpause?).to eq false }
       it { expect(paused_subscription.send :can_unpause?).to eq true }
-      it { expect(cancelled_subscription.send :can_unpause?).to eq false }
+      it { expect(canceled_subscription.send :can_unpause?).to eq false }
       it { expect(disabled_subscription.send :can_unpause?).to eq false }
       it { expect(completed_subscription.send :can_unpause?).to eq false }
     end
@@ -340,30 +340,30 @@ describe Spree::Subscription, type: :model do
       end
     end
 
-    context "#not_cancelled?" do
-      it { expect(active_subscription.send :not_cancelled?).to eq true }
-      it { expect(disabled_subscription.send :not_cancelled?).to eq true }
-      it { expect(cancelled_subscription.send :not_cancelled?).to eq false }
+    context "#not_canceled?" do
+      it { expect(active_subscription.send :not_canceled?).to eq true }
+      it { expect(disabled_subscription.send :not_canceled?).to eq true }
+      it { expect(canceled_subscription.send :not_canceled?).to eq false }
     end
 
-    context "#can_set_cancelled_at?" do
-      context "when cancelled present" do
-        before { active_subscription.cancelled = true }
-        it { expect(active_subscription.send :can_set_cancelled_at?).to eq true }
+    context "#can_set_canceled_at?" do
+      context "when canceled present" do
+        before { active_subscription.canceled = true }
+        it { expect(active_subscription.send :can_set_canceled_at?).to eq true }
       end
 
-      context "when cancelled not present" do
-        it { expect(active_subscription.send :can_set_cancelled_at?).to eq false }
+      context "when canceled not present" do
+        it { expect(active_subscription.send :can_set_canceled_at?).to eq false }
       end
     end
 
     context "#cancellation_notifiable?" do
-      context "when cancelled at not present neither changed" do
+      context "when canceled at not present neither changed" do
         it { expect(active_subscription.send :cancellation_notifiable?).to eq false }
       end
 
-      context "when cancelled at present and value changed" do
-        before { active_subscription.cancelled_at = Time.current }
+      context "when canceled at present and value changed" do
+        before { active_subscription.canceled_at = Time.current }
         it { expect(active_subscription.send :cancellation_notifiable?).to eq true }
       end
     end
@@ -394,16 +394,16 @@ describe Spree::Subscription, type: :model do
     end
 
     context "#cancellation_notifiable?" do
-      context "when cancelled at present and not changed" do
-        it { expect(cancelled_subscription.send :cancellation_notifiable?).to eq false }
+      context "when canceled at present and not changed" do
+        it { expect(canceled_subscription.send :cancellation_notifiable?).to eq false }
       end
 
-      context "when cancelled at is not present" do
+      context "when canceled at is not present" do
         it { expect(active_subscription.send :cancellation_notifiable?).to eq false }
       end
 
-      context "when cancelled_at present and changed" do
-        before { active_subscription.cancelled_at = Time.current }
+      context "when canceled_at present and changed" do
+        before { active_subscription.canceled_at = Time.current }
         it { expect(active_subscription.send :cancellation_notifiable?).to eq true }
       end
     end
@@ -430,7 +430,7 @@ describe Spree::Subscription, type: :model do
 
     context "#cancel_with_reason" do
       before { active_subscription.cancel_with_reason({ cancellation_reasons: "Test" }) }
-      it { expect(active_subscription.cancelled_at).to_not be_nil }
+      it { expect(active_subscription.canceled_at).to_not be_nil }
       it { expect(active_subscription.cancellation_reasons).to_not be_nil }
       it { expect(active_subscription.cancellation_reasons).to eq "Test" }
     end

@@ -1,5 +1,5 @@
 <p>Hi <%= @subscription.parent_order.email %></p>
-<p>Your <%= @subscription.frequency.title %> subscription is cancelled</p>
+<p>Your <%= @subscription.frequency.title %> subscription is canceled</p>
 <div>
   <p>
     <%= Spree.t('order_mailer.confirm_email.order_summary', number: @subscription.parent_order.number) %>

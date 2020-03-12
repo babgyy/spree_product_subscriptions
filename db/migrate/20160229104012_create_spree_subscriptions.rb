@@ -9,7 +9,7 @@ class CreateSpreeSubscriptions < ActiveRecord::Migration[5.2]
       t.references :bill_address, index: true
       t.date :last_recurrence_at, index: true
       t.date :end_date, index: true
-      t.date :cancelled_at, index: true
+      t.date :canceled_at, index: true
       t.decimal :price, precision: 8, scale: 2
 
       t.timestamps null: false

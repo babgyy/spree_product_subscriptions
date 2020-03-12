@@ -104,7 +104,7 @@ AjaxHandler.prototype.handlePatchSuccess = function($target, response) {
 AjaxHandler.prototype.handleCancelSuccess = function($target, response) {
   this.hideFlashDivs();
   $("#success_flash_message").html(response.flash).removeClass("hidden");
-  $('[data-id="' + response.subscription_id + '"] .subscription-action-links').html("Subscription Cancelled");
+  $('[data-id="' + response.subscription_id + '"] .subscription-action-links').html("Subscription Canceled");
 };
 
 AjaxHandler.prototype.handleErrorResponse = function($target, response) {

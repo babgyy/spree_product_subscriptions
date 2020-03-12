@@ -3,7 +3,7 @@ module Spree
 
     before_action :ensure_subscription
     before_action :ensure_subscription_belongs_to_user, only: :edit
-    before_action :ensure_not_cancelled, only: [:update, :cancel, :pause, :unpause]
+    before_action :ensure_not_canceled, only: [:update, :cancel, :pause, :unpause]
 
     def edit
     end
@@ -92,7 +92,7 @@ module Spree
         end
       end
 
-      def ensure_not_cancelled
+      def ensure_not_canceled
         if @subscription.not_changeable?
           respond_to do |format|
             format.html { redirect_back fallback_location: root_path, error: Spree.t("subscriptions.error.not_changeable") }

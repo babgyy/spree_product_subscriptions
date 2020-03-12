@@ -9,8 +9,8 @@
   <td class="text-center subscription-deliveries-left"><%= subscription.number_of_deliveries_left %></td>
   <td class="subscription-action-links">
     <% @subscription = subscription %>
-    <% if subscription.cancelled? %>
-        Subscription Cancelled
+    <% if subscription.canceled? %>
+        Subscription Canceled
     <% elsif !subscription.deliveries_remaining? %>
         Completed
     <% else %>

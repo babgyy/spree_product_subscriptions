@@ -12,8 +12,8 @@
     <% @subscription = subscription %>
     <% if !subscription.deliveries_remaining? %>
       Completed
-    <% elsif subscription.cancelled? %>
-      Cancelled
+    <% elsif subscription.canceled? %>
+      Canceled
     <% else %>
       <span id="pause_links">
         <% if !@subscription.paused? %>

@@ -47,13 +47,13 @@
         <td><strong><%= Spree.t(:deliveries_left) %></strong></td>
         <td><%= @subscription.number_of_deliveries_left %></td>
       </tr>
-      <% if @subscription.cancelled? %>
+      <% if @subscription.canceled? %>
         <tr id="cancellation_fields">
           <td>
-            <strong><%= Spree.t(:cancelled_at) %></strong>
+            <strong><%= Spree.t(:canceled_at) %></strong>
           </td>
           <td>
-            <span><%= @subscription.cancelled_at.to_formatted_s(:long) %></span>
+            <span><%= @subscription.canceled_at.to_formatted_s(:long) %></span>
           </td>
         </tr>
         <tr>
