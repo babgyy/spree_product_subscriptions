@@ -47,7 +47,7 @@ RSpec.configure do |config|
   config.run_all_when_everything_filtered = true
   config.include FactoryBot::Syntax::Methods
   config.infer_spec_type_from_file_location!
-  config.raise_errors_for_deprecations!
+  # config.raise_errors_for_deprecations!
   config.expect_with :rspec do |expectations|
     expectations.syntax = :expect
   end

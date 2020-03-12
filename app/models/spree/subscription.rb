@@ -47,7 +47,7 @@ module Spree
     with_options presence: true do
       validates :quantity, :delivery_number, :price, :number, :variant, :parent_order, :frequency, :prior_notification_days_gap
       validates :cancellation_reasons, :cancelled_at, if: :cancelled
-      validates :ship_address, :bill_address, :next_occurrence_at, :source, if: :enabled?
+      validates :next_occurrence_at, :source, if: :enabled?
     end
     validate :next_occurrence_at_range, if: :next_occurrence_at
     validate :prior_notification_days_gap_value, if: :prior_notification_days_gap

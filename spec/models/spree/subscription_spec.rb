@@ -64,8 +64,6 @@ describe Spree::Subscription, type: :model do
     end
     context "if enabled" do
       before { subject.enabled = true }
-      it { expect(subject).to validate_presence_of(:ship_address) }
-      it { expect(subject).to validate_presence_of(:bill_address) }
       context "validate_presence_of next_occurrence_at" do
         context "when next_occurrence_at is present" do
           before do
