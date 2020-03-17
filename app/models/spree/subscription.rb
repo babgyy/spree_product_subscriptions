@@ -28,12 +28,14 @@ module Spree
 
     self.whitelisted_ransackable_associations = %w( parent_order )
 
-    scope :paused, -> { where(paused: true) }
-    scope :unpaused, -> { where(paused: false) }
-    scope :disabled, -> { where(enabled: false) }
-    scope :active, -> { where(enabled: true) }
+    # scope :paused, -> { where(paused: true) }
+    # scope :unpaused, -> { where(paused: false) }
+    # scope :disabled, -> { where(enabled: false) }
+    scope :awaiting_payment, -> { with_states('pending', 'paused')}
+    
+    # scope :active, -> { where(enabled: true) }
     scope :not_canceled, -> { where(canceled_at: nil) }
-    scope :with_appropriate_delivery_time, -> { where("next_occurrence_at <= :current_date", current_date: Time.current) }
+    # scope :with_appropriate_delivery_time, -> { where("next_occurrence_at <= :current_date", current_date: Time.current) }
     scope :processable, -> { unpaused.active.not_canceled }
     scope :eligible_for_subscription, -> { processable.with_appropriate_delivery_time }
     scope :with_parent_orders, -> (orders) { where(parent_order: orders) }
@@ -41,16 +43,12 @@ module Spree
     with_options allow_blank: true do
       validates :price, numericality: { greater_than_or_equal_to: 0 }
       validates :quantity, numericality: { greater_than: 0, only_integer: true }
-      validates :delivery_number, numericality: { greater_than_or_equal_to: :recurring_orders_size, only_integer: true }
       validates :parent_order, uniqueness: { scope: :variant }
     end
     with_options presence: true do
-      validates :quantity, :delivery_number, :price, :number, :variant, :parent_order, :frequency, :prior_notification_days_gap
-      validates :cancellation_reasons, :canceled_at, if: :canceled
-      validates :next_occurrence_at, :source, if: :enabled?
+      validates :quantity, :price, :number, :variant, :parent_order, :frequency
+      validates :next_occurrence_at, :source, if: :active?
     end
-    validate :next_occurrence_at_range, if: :next_occurrence_at
-    validate :prior_notification_days_gap_value, if: :prior_notification_days_gap
 
     state_machine :state, initial: :pending do
       event :activate do
@@ -68,25 +66,43 @@ module Spree
       event :failed do 
         transition from: :processing, to: :paused
       end
+
+      after_transition from: :pending, to: :active, do: :notify_start
+      after_transition from: :processing, to: :active, do: :notify_renewal
+      after_transition to: :processing, do: :process
+      before_transition to: :active, do: :set_activated_at_and_next_occurrence_at!
+      after_transition from: :active, do: :record_active_duration!
+      after_transition to: :canceled, do: [:set_canceled_at!, :notify_cancellation]
+      after_transition to: :paused, do: [:set_paused_at!, :notify_failure]
     end
 
-    define_model_callbacks :pause, only: [:before]
-    before_pause :can_pause?
-    define_model_callbacks :unpause, only: [:before]
-    before_unpause :can_unpause?, :set_next_occurrence_at_after_unpause
-    define_model_callbacks :process, only: [:after]
-    after_process :notify_reoccurrence, if: :reoccurrence_notifiable?
-    define_model_callbacks :cancel, only: [:before]
-    before_cancel :set_cancellation_reason, if: :can_set_cancellation_reason?
+    # state_machine.states.each do 
+    def set_activated_at_and_next_occurrence_at!
+      update({
+        activated_at: Time.zone.now,
+        next_occurrence_at: next_occurrence_at_value
+      })
+    end
 
-    before_validation :set_next_occurrence_at, if: :can_set_next_occurrence_at?
-    before_validation :set_canceled_at, if: :can_set_canceled_at?
-    before_update :not_canceled?
-    before_validation :update_price, on: :update, if: :variant_id_changed?
-    before_update :next_occurrence_at_not_changed?, if: :paused?
-    after_update :notify_user, if: :user_notifiable?
-    after_update :notify_cancellation, if: :cancellation_notifiable?
-    after_update :update_next_occurrence_at
+    def set_canceled_at!
+      update(canceled_at: Time.zone.now)
+    end
+
+    def set_paused_at!
+      update(paused_at: Time.zone.now)
+    end
+
+    def record_active_duration!
+      update(active_duration_snapshot: active_duration)
+    end
+
+    def active_duration 
+      if active? 
+        active_duration_snapshot + (Time.zone.now - activated_at)
+      else
+        active_duration_snapshot
+      end
+    end
 
     def process
       if (variant.stock_items.sum(:count_on_hand) >= quantity || variant.stock_items.any? { |stock| stock.backorderable? }) && (!variant.product.discontinued?)
@@ -98,97 +114,18 @@ module Spree
       update(next_occurrence_at: next_occurrence_at_value) if new_order.try :completed?
     end
 
-    def cancel_with_reason(attributes)
-      self.canceled = true
-      update(attributes)
-    end
-
-    def canceled?
-      !!canceled_at_was
-    end
-
     def number_of_deliveries_left
       delivery_number.to_i - complete_orders.size - 1
-    end
-
-    def pause
-      run_callbacks :pause do
-        update_attributes(paused: true)
-      end
-    end
-
-    def unpause
-      run_callbacks :unpause do
-        update_attributes(paused: false)
-      end
-    end
-
-    def cancel
-      self.canceled = true
-      run_callbacks :cancel do
-        update_attributes(canceled_at: Time.current)
-      end
     end
 
     def deliveries_remaining?
       number_of_deliveries_left > 0
     end
 
-    def not_changeable?
-      canceled? || !deliveries_remaining?
-    end
-
-    def send_prior_notification
-      if eligible_for_prior_notification?
-        SubscriptionNotifier.notify_for_next_delivery(self).deliver_later
-      end
-    end
-
     private
 
-      def eligible_for_prior_notification?
-        (next_occurrence_at.to_date - Time.current.to_date).round == prior_notification_days_gap
-      end
-
-      def update_price
-        if valid_variant?
-          self.price = variant.price
-        else
-          self.errors.add(:variant_id, :does_not_belong_to_product)
-        end
-      end
-
-      def valid_variant?
-        variant_was = Spree::Variant.find_by(id: variant_id_was)
-        variant.present? && variant_was.try(:product_id) == variant.product_id
-      end
-
-      def set_canceled_at
-        self.canceled_at = Time.current
-      end
-
-      def set_next_occurrence_at
-        self.next_occurrence_at = next_occurrence_at_value
-      end
-
       def next_occurrence_at_value
-        deliveries_remaining? ? Time.current + frequency.months_count.month : next_occurrence_at
-      end
-
-      def can_set_next_occurrence_at?
-        enabled? && next_occurrence_at.nil? && deliveries_remaining?
-      end
-
-      def set_next_occurrence_at_after_unpause
-        self.next_occurrence_at = (Time.current > next_occurrence_at) ? next_occurrence_at + frequency.months_count.month : next_occurrence_at
-      end
-
-      def can_pause?
-        enabled? && !canceled? && deliveries_remaining? && !paused?
-      end
-
-      def can_unpause?
-        enabled? && !canceled? && deliveries_remaining? && paused?
+        deliveries_remaining? ? Time.current + frequency.months_count.month : nil
       end
 
       def recreate_order
@@ -269,70 +206,16 @@ module Spree
         }
       end
 
-      def notify_user
+      def notify_start
         SubscriptionNotifier.notify_confirmation(self).deliver_later
-      end
-
-      def not_canceled?
-        !canceled?
-      end
-
-      def can_set_canceled_at?
-        canceled.present? && deliveries_remaining?
-      end
-
-      def set_cancellation_reason
-        self.cancellation_reasons = USER_DEFAULT_CANCELLATION_REASON
-      end
-
-      def can_set_cancellation_reason?
-        canceled.present? && deliveries_remaining? && cancellation_reasons.nil?
       end
 
       def notify_cancellation
         SubscriptionNotifier.notify_cancellation(self).deliver_later
       end
 
-      def cancellation_notifiable?
-        canceled_at.present? && canceled_at_changed?
-      end
-
-      def reoccurrence_notifiable?
-        next_occurrence_at_changed? && !!next_occurrence_at_was
-      end
-
-      def notify_reoccurrence
+      def notify_renewal
         SubscriptionNotifier.notify_reoccurrence(self).deliver_later
-      end
-
-      def recurring_orders_size
-        complete_orders.size + 1
-      end
-
-      def user_notifiable?
-        enabled? && enabled_changed?
-      end
-
-      def next_occurrence_at_not_changed?
-        !next_occurrence_at_changed?
-      end
-
-      def next_occurrence_at_range
-        unless next_occurrence_at >= Time.current.to_date
-          errors.add(:next_occurrence_at, Spree.t('subscriptions.error.out_of_range'))
-        end
-      end
-
-      def update_next_occurrence_at
-        update_column(:next_occurrence_at, next_occurrence_at_value)
-      end
-
-      def prior_notification_days_gap_value
-        return if next_occurrence_at_value.nil?
-
-        if Time.current + prior_notification_days_gap.days >= next_occurrence_at_value
-          errors.add(:prior_notification_days_gap, Spree.t('subscriptions.error.should_be_earlier_than_next_delivery'))
-        end
       end
   end
 end

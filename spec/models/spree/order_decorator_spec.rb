@@ -2,10 +2,11 @@ require 'spec_helper'
 
 describe Spree::Order, type: :model do
 
-  let(:disabled_subscription) { create(:valid_subscription, enabled: false) }
+  let(:disabled_subscription) { create(:valid_subscription, state: :pending) }
   let(:subscriptions) { [disabled_subscription] }
   let(:order_with_subscriptions) { create(:completed_order_with_pending_payment, subscriptions: subscriptions) }
-  let(:incompleted_order) { create(:order_with_line_items, subscriptions: subscriptions, state: "confirm", payments: order_with_subscriptions.payments) }
+  let(:completed_order_with_subscriptions) { create(:order_ready_to_ship, subscriptions: subscriptions) }
+  let(:incompleted_order) { create(:order_with_line_items, subscriptions: subscriptions, state: "confirm", payments: completed_order_with_subscriptions.payments) }
 
   describe "associations" do
     it { is_expected.to have_one(:order_subscription).class_name("Spree::OrderSubscription").dependent(:destroy) }
@@ -33,12 +34,12 @@ describe Spree::Order, type: :model do
       end
     end
 
-    context "#any_disabled_subscription?" do
-      it { expect(order_with_subscriptions.send :any_disabled_subscription?).to eq true  }
+    context "#any_awaiting_payment_subscriptions?" do
+      it { expect(order_with_subscriptions.send :any_awaiting_payment_subscriptions?).to eq true  }
     end
 
     context "#enable_subscriptions" do
-      it { expect { order_with_subscriptions.send :enable_subscriptions }.to change { order_with_subscriptions.subscriptions.disabled.count }.by -1 }
+      it { expect { completed_order_with_subscriptions.send :enable_subscriptions }.to change { order_with_subscriptions.subscriptions.awaiting_payment.count }.by -1 }
     end
 
     context "#update_subscriptions" do
@@ -58,7 +59,7 @@ describe Spree::Order, type: :model do
     end
 
     context "state machine" do
-      it { expect { incompleted_order.next }.to change { incompleted_order.subscriptions.disabled.count }.by -1 }
+      it { expect { incompleted_order.next }.to change { incompleted_order.subscriptions.awaiting_payment.count }.by -1 }
     end
   end
 end

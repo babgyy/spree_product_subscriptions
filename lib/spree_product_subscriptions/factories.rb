@@ -3,11 +3,18 @@ FactoryBot.define do
     title { "monthly" }
     months_count { 1 }
   end
+  factory :subscribable_product, parent: :product do 
+    subscribable { true }
+
+    after(:build) do |product| 
+      product.subscription_frequencies = [build(:monthly_subscription_frequency)]
+    end
+  end
 
   factory :nil_attributes_subscription, class: Spree::Subscription do
   end
 
-  factory :valid_subscription, class: Spree::Subscription do
+  factory :pending_subscription, class: Spree::Subscription do
     price { 20.00 }
     quantity { 2 } 
     delivery_number { 4 }
@@ -17,5 +24,10 @@ FactoryBot.define do
     association :ship_address, factory: :address
     association :bill_address, factory: :address
     association :source, factory: :credit_card
+
+    factory :valid_subscription do
+      state { :active } 
+      next_occurrence_at { Time.zone.now + 10.days }
+    end
   end
 end

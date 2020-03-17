@@ -7,7 +7,7 @@ describe Spree::LineItem, type: :model do
   let(:variant) { create(:base_variant) }
   let!(:line_item_without_subscription_attributes) { create(:line_item, order: order, variant: variant) }
   let!(:line_item_with_subscription_attributes) { create(:line_item, order: order, subscription_frequency_id: 1, delivery_number: 6) }
-  let!(:active_subscription) { create(:valid_subscription, enabled: true, variant: line_item_with_subscription_attributes.variant, subscription_frequency_id: frequency.id, delivery_number: 6, parent_order: order) }
+  let!(:active_subscription) { create(:valid_subscription, state: :active, variant: line_item_with_subscription_attributes.variant, subscription_frequency_id: frequency.id, delivery_number: 6, parent_order: order) }
   let!(:line_item_without_subscription) { create(:line_item) }
 
   describe "callbacks" do

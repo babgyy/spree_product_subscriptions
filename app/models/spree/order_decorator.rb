@@ -6,7 +6,7 @@ Spree::Order.class_eval do
                            foreign_key: :parent_order_id,
                            dependent: :restrict_with_error
 
-  self.state_machine.after_transition to: :complete, do: :enable_subscriptions, if: :any_disabled_subscription?
+  self.state_machine.after_transition to: :complete, do: :enable_subscriptions, if: :any_awaiting_payment_subscriptions?
 
   after_update :update_subscriptions
 
@@ -22,17 +22,15 @@ Spree::Order.class_eval do
 
     def enable_subscriptions
       subscriptions.each do |subscription|
-        subscription.update(
-          source: payments.from_credit_card.completed.first.source,
-          enabled: true,
-          ship_address: ship_address.clone,
-          bill_address: bill_address.clone
-        )
+        subscription.source = payments.with_states(:pending, :completed).first.source
+        subscription.ship_address = ship_address&.clone
+        subscription.bill_address = bill_address&.clone
+        subscription.activate!
       end
     end
 
-    def any_disabled_subscription?
-      subscriptions.disabled.any?
+    def any_awaiting_payment_subscriptions?
+      subscriptions.awaiting_payment.any?
     end
 
     def update_subscriptions

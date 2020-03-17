@@ -1,6 +1,6 @@
 Spree::LineItem.class_eval do
 
-  attr_accessor :subscription_frequency_id, :delivery_number, :subscribe
+  attr_accessor :subscription_frequency_id, :subscribe, :delivery_number
 
   after_create :create_subscription!, if: :subscribable?
   after_update :update_subscription_quantity, if: :can_update_subscription_quantity?
@@ -8,13 +8,13 @@ Spree::LineItem.class_eval do
   after_destroy :destroy_associated_subscription!, if: :subscription?
 
   def subscription_attributes_present?
-    subscription_frequency_id.present? && delivery_number.present?
+    subscription_frequency_id.present? || delivery_number.present?
   end
 
   def updatable_subscription_attributes
     {
       subscription_frequency_id: subscription_frequency_id || subscription.subscription_frequency_id,
-      delivery_number: delivery_number || subscription.delivery_number
+      delivery_number: delivery_number || subscription&.delivery_number || Spree::Subscription.new.delivery_number
     }
   end
 
@@ -44,10 +44,6 @@ Spree::LineItem.class_eval do
         variant: variant,
         quantity: quantity
       }
-    end
-
-    def delivery_number
-      self[:delivery_number] || 1_000_000_000
     end
 
     def update_subscription_quantity
