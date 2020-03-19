@@ -27,13 +27,14 @@ module Spree
     has_many :complete_orders, -> { complete }, through: :orders_subscriptions, source: :order
 
     self.whitelisted_ransackable_associations = %w( parent_order )
+    self.whitelisted_ransackable_attributes = %w( state )
 
     # scope :paused, -> { where(paused: true) }
     # scope :unpaused, -> { where(paused: false) }
     # scope :disabled, -> { where(enabled: false) }
-    scope :awaiting_payment, -> { with_states('pending', 'paused')}
+    scope :awaiting_payment, -> { with_states(:pending, :paused)}
     
-    # scope :active, -> { where(enabled: true) }
+    scope :active, -> { with_states([:active_one_last_period, :active_and_renewable]) }
     scope :not_canceled, -> { where(canceled_at: nil) }
     # scope :with_appropriate_delivery_time, -> { where("next_occurrence_at <= :current_date", current_date: Time.current) }
     scope :processable, -> { unpaused.active.not_canceled }
@@ -52,36 +53,47 @@ module Spree
 
     state_machine :state, initial: :pending do
       event :activate do
-        transition from: [:pending, :processing], to: :active
+        transition pending: :active_and_renewable
       end
+      after_transition on: :activate, do: :notify_start
 
       event :cancel do
-        transition from: [:active, :paused], to: :canceled
+        transition active_and_renewable: :active_one_last_period
+        transition paused: :canceled
+      end
+      after_transition on: :cancel, do: :set_canceled_at!
+
+      event :terminate do 
+        transition active_one_last_period: :canceled
       end
 
       event :renew do 
-        transition from: [:active, :paused], to: :processing
+        transition from: [:active_and_renewable, :paused], to: :processing
       end
-
-      event :failed do 
-        transition from: :processing, to: :paused
+      after_transition on: :renew, do: :process
+        
+      event :renew_success do
+        transition processing: :active_and_renewable
       end
+      after_transition on: :renew_success, do: :notify_renewal
 
-      after_transition from: :pending, to: :active, do: :notify_start
-      after_transition from: :processing, to: :active, do: :notify_renewal
-      after_transition to: :processing, do: :process
-      before_transition to: :active, do: :set_activated_at_and_next_occurrence_at!
-      after_transition from: :active, do: :record_active_duration!
-      after_transition to: :canceled, do: [:set_canceled_at!, :notify_cancellation]
-      after_transition to: :paused, do: [:set_paused_at!, :notify_failure]
+      event :renew_failed do 
+        transition processing: :paused
+      end
+      after_transition on: :renew_failed, do: [:set_paused_at!, :notify_failure]
+
+      before_transition to: :active_and_renewable, do: [:set_activated_at!, :set_next_occurrence_at!]
+      before_transition to: :active_one_last_period, do: [:set_activated_at!, :notify_last_period]
+      after_transition from: [:active_and_renewable, :active_one_last_period], do: :record_active_duration!
+      after_transition to: :canceled, do: :notify_cancellation
     end
 
-    # state_machine.states.each do 
-    def set_activated_at_and_next_occurrence_at!
-      update({
-        activated_at: Time.zone.now,
-        next_occurrence_at: next_occurrence_at_value
-      })
+    def set_next_occurrence_at!
+      update(next_occurrence_at: next_occurrence_at_value)
+    end
+
+    def set_activated_at!
+      update(activated_at: Time.zone.now)
     end
 
     def set_canceled_at!
@@ -96,6 +108,10 @@ module Spree
       update(active_duration_snapshot: active_duration)
     end
 
+    def active? 
+      active_one_last_period? or active_and_renewable?
+    end
+
     def active_duration 
       if active? 
         active_duration_snapshot + (Time.zone.now - activated_at)
@@ -105,13 +121,18 @@ module Spree
     end
 
     def process
-      if (variant.stock_items.sum(:count_on_hand) >= quantity || variant.stock_items.any? { |stock| stock.backorderable? }) && (!variant.product.discontinued?)
-        update_column(:next_occurrence_possible, true)
-      else
-        update_column(:next_occurrence_possible, false)
+      # if (variant.stock_items.sum(:count_on_hand) >= quantity || variant.stock_items.any? { |stock| stock.backorderable? }) && (!variant.product.discontinued?)
+      #   update_column(:next_occurrence_possible, true)
+      # else
+      #   update_column(:next_occurrence_possible, false)
+      # end
+      new_order = recreate_order if deliveries_remaining? # && next_occurrence_possible)
+      if new_order && new_order.completed?
+        # update(next_occurrence_at: next_occurrence_at_value)
+        self.renew_success
+      else 
+        self.renew_failed
       end
-      new_order = recreate_order if (deliveries_remaining? && next_occurrence_possible)
-      update(next_occurrence_at: next_occurrence_at_value) if new_order.try :completed?
     end
 
     def number_of_deliveries_left
@@ -144,7 +165,11 @@ module Spree
       end
 
       def add_variant_to_order(order)
-        order.contents.add(variant, quantity)
+        Spree::Dependencies.cart_add_item_service.constantize.call({
+          order: order, 
+          variant: variant, 
+          quantity: quantity
+        })
         order.next
       end
 
@@ -160,7 +185,7 @@ module Spree
       def add_delivery_method_to_order(order)
         if order.delivery?
           if !order.shipments.empty?
-            selected_shipping_method_id = parent_order.inventory_units.where(variant_id: variant.id).first.shipment.shipping_method.id
+            selected_shipping_method_id = parent_order.shipments.first.shipping_method.id
 
             order.shipments.each do |shipment|
               current_shipping_rate = shipment.shipping_rates.find_by(selected: true)
@@ -181,10 +206,13 @@ module Spree
       end
 
       def add_payment_method_to_order(order)
+        payment_method = source.is_a?(Spree::StoreCredit) ?
+          Spree::PaymentMethod::StoreCredit.available.first : 
+          source.payment_method
         if order.payments.exists?
-          order.payments.first.update(source: source, payment_method: source.payment_method)
+          order.payments.first.update(source: source, payment_method: payment_method)
         else
-          order.payments.create(source: source, payment_method: source.payment_method, amount: order.total)
+          order.payments.create(source: source, payment_method: payment_method, amount: order.total)
         end
         order.next
       end
@@ -198,7 +226,7 @@ module Spree
       def order_attributes
         {
           currency: parent_order.currency,
-          guest_token: parent_order.guest_token,
+          token: parent_order.token,
           store: parent_order.store,
           user: parent_order.user,
           created_by: parent_order.user,
@@ -216,6 +244,14 @@ module Spree
 
       def notify_renewal
         SubscriptionNotifier.notify_reoccurrence(self).deliver_later
+      end
+
+      def notify_failure
+        SubscriptionNotifier.notify_failure(self).deliver_later
+      end
+
+      def notify_last_period
+        SubscriptionNotifier.notify_last_period(self).deliver_later
       end
   end
 end

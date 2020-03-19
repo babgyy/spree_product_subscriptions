@@ -23,7 +23,21 @@ class Spree::SubscriptionNotifier < ApplicationMailer
          subject: t('.subject', number: subscription.number, frequency: subscription.frequency.title.capitalize)
   end
 
+  def notify_failure(subscription)
+    @subscription = subscription
+
+    mail to: subscription.parent_order.email,
+         subject: t('.subject', number: subscription.number, frequency: subscription.frequency.title.capitalize)
+  end
+
   def notify_for_next_delivery(subscription)
+    @subscription = subscription
+
+    mail to: subscription.parent_order.email,
+         subject: t('.subject', number: subscription.number, frequency: subscription.frequency.title.capitalize)
+  end
+  
+  def notify_last_period(subscription)
     @subscription = subscription
 
     mail to: subscription.parent_order.email,

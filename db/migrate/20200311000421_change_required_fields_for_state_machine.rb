@@ -7,6 +7,6 @@ class ChangeRequiredFieldsForStateMachine < ActiveRecord::Migration[5.2]
     add_column :spree_subscriptions, :state, :string
     add_column :spree_subscriptions, :activated_at, :datetime
     add_column :spree_subscriptions, :paused_at, :datetime
-    add_column :spree_subscriptions, :active_duration_snapshot, :integer
+    add_column :spree_subscriptions, :active_duration_snapshot, :integer, default: 0
   end
 end

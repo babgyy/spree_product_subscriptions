@@ -10,7 +10,18 @@ describe Spree::Subscription, type: :model do
   let(:order_waiting_to_be_completed) { create(:completed_order_with_pending_payment, state: 'cart') }
   let(:nil_attributes_subscription) { build(:nil_attributes_subscription) }
   let(:pending_subscription) { create(:pending_subscription) }
-  let(:active_subscription) { create(:valid_subscription, parent_order: order, next_occurrence_at: just_passed_time) }
+  let(:active_subscription) do 
+    create(:valid_subscription, 
+      parent_order: create(:completed_order_with_captured_store_credit_payment), 
+      next_occurrence_at: just_passed_time,
+      source: create(:store_credit, amount: 10000)) 
+  end
+  let(:active_subscription_without_further_credits) do
+    create(:valid_subscription, 
+      parent_order: create(:completed_order_with_captured_store_credit_payment), 
+      next_occurrence_at: just_passed_time,
+      source: create(:store_credit, amount: 10)) 
+  end
   let(:disabled_subscription) { create(:valid_subscription, state: :paused) }
   let(:completed_subscription) { create(:valid_subscription, delivery_number: 1) }
   let(:paused_subscription) { create(:valid_subscription, paused: true, next_occurrence_at: just_passed_time) }
@@ -52,22 +63,92 @@ describe Spree::Subscription, type: :model do
   end
 
   describe "state machine" do 
+
+    subject { pending_subscription }
+
     context "pending" do 
       it { assert subject.pending? } 
       it { refute subject.active? }
-      it {
-
-      }
+      it { assert subject.activated_at.blank? }
+      it { assert subject.canceled_at.blank? }
+      it { expect(subject.active_duration).to be(0) }
+      it { expect(Spree::Subscription.awaiting_payment).to include subject }
     end
 
     context "activate" do 
       
       subject { pending_subscription } 
-      
+
       before { subject.activate }
 
+      it { assert subject.active? }
+      it { assert subject.active_and_renewable? }
+      it { is_expected.to validate_presence_of(:quantity) }
+      it { is_expected.to validate_presence_of(:price) }
+      it { refute subject.activated_at.blank? }
+      it { refute subject.next_occurrence_at.blank? }
+      it { expect(subject.active_duration).to be > 0 }
+      it { expect(subject.active_duration).to be < subject.active_duration }
+      it { expect(Spree::Subscription.active).to eq([subject])}
+      it { expect(Spree::Subscription.awaiting_payment).not_to include subject }
+
+    end
+
+    context "cancel an active subscription" do 
+      
+      subject { active_subscription }
+
+      before { subject.cancel }
+
       it { assert subject.active? } 
-      it { expect(Spree::Subscription.with_state(:active)).to eq([subject])}
+      it { assert subject.active_one_last_period? } 
+      it { refute subject.canceled_at.blank? }
+      it { refute subject.activated_at.blank? }
+      it { refute subject.next_occurrence_at.blank? }
+      it { expect(subject.active_duration).to be > 0 }
+      it { expect(subject.active_duration).to be < subject.active_duration }
+      
+      # test that corresponding orders are not canceled
+      # test that user is still premium until the end of period => in client code
+      # test that premium time will still run until the end of the period => in client code
+    end
+
+    context "renew successfully an active subscription" do 
+      
+      subject { active_subscription }
+      
+      context "should have correct state" do 
+      
+        before { subject.renew }
+
+        it { assert subject.active? } 
+        it { assert subject.active_and_renewable? } 
+        it { assert subject.canceled_at.blank? }
+        it { refute subject.activated_at.blank? }
+        it { refute subject.next_occurrence_at.blank? }
+        it { expect(subject.active_duration).to be > 0 }
+        it { expect(subject.active_duration).to be < subject.active_duration }
+      end
+      context "renew action" do 
+        it { expect{ subject.renew }.to change{ subject.reload.complete_orders.size }.by(1) }
+      end
+    end
+
+    context "renew failed of an active subscription" do
+      
+      subject { active_subscription_without_further_credits } 
+
+      context "should have correct state" do 
+
+        before { subject.renew }
+
+        it { assert subject.paused? }
+      end
+
+      context "renew action" do 
+        
+        it { expect{ subject.renew }.to change{ subject.complete_orders.size }.by(0) }
+      end
     end
   end
   # describe "validations" do
@@ -229,11 +310,15 @@ describe Spree::Subscription, type: :model do
   #   end
   # end
 
-  # describe "ransackable" do
-  #   context "whitelisted ransackable associations" do
-  #     it { expect(Spree::Subscription.whitelisted_ransackable_associations).to include "parent_order" }
-  #   end
-  # end
+  describe "ransackable" do
+    context "whitelisted ransackable associations" do
+      it { expect(Spree::Subscription.whitelisted_ransackable_associations).to include "parent_order" }
+    end
+
+    context "whitelisted ransackable attributees" do
+      it { expect(Spree::Subscription.whitelisted_ransackable_attributes).to include "state" }
+    end
+  end
 
   # describe "methods" do
   #   context "#canceled?" do
@@ -493,7 +578,7 @@ describe Spree::Subscription, type: :model do
   #   context "#order_attributes" do
   #     it { expect(active_subscription.send :order_attributes).to eq ({
   #       currency: order.currency,
-  #       guest_token: order.guest_token,
+  #       token: order.token,
   #       store: order.store,
   #       user: order.user,
   #       created_by: order.user,
@@ -504,7 +589,7 @@ describe Spree::Subscription, type: :model do
   #   context "#order recreation" do
   #     let(:order_attributes) { {
   #       currency: order.currency,
-  #       guest_token: order.guest_token,
+  #       token: order.token,
   #       store: order.store,
   #       user: order.user,
   #       created_by: order.user,
@@ -525,7 +610,7 @@ describe Spree::Subscription, type: :model do
 
   #     context "#make_new_order" do
   #       it { expect(created_order.currency).to eq new_order.currency }
-  #       it { expect(created_order.guest_token).to eq new_order.guest_token }
+  #       it { expect(created_order.token).to eq new_order.token }
   #       it { expect(created_order.store).to eq new_order.store }
   #       it { expect(created_order.user).to eq new_order.user }
   #       it { expect(created_order.created_by).to eq new_order.created_by }

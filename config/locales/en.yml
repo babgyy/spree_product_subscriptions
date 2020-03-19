@@ -12,10 +12,13 @@ en:
         subject: "%{frequency} %{number} Subscription Canceled"
       notify_reoccurrence:
         subject: "%{frequency} %{number} Subscription Reoccurrence"
+      notify_failure:
+        subject: "%{frequency} %{number} Subscription Failure"
       notify_for_next_delivery:
         subject: "%{frequency} %{number} Subscription Notice"
         order_details: 'Order Details'
-
+      notify_last_period: 
+        subject: "%{frequency} %{number} Subscription Last Period"
     subscriptions:
       pause:
         success: "Subscription is paused"
